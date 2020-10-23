@@ -1,0 +1,43 @@
+{
+  "name": "Dashboard Download",
+  "namespace": "DCC\\DashboardDownload",
+  "description": "Download the Dashboard in three different styles.",
+  "documentation": "README.md",
+  "authors": [
+    {
+      "name": "Greg Neils",
+      "email": "gn2003@cumc.columbia.edu",
+      "institution": "Columbia University "
+    }
+  ],
+  "versions": [
+    {
+      "0.1": "Proof of Concept"
+    }
+  ],
+  "permissions": [
+    "redcap_project_home_page"
+  ],
+  "enable-every-page-hooks-on-system-pages": false,
+  "links": {
+    "project": [
+      {
+        "name": "Dashboard Download",
+        "icon": "database_table",
+        "url": "index.php"
+      }
+    ],
+    "control-center": [
+    ]
+  },
+  "project-settings": [
+  ],
+  "system-settings": [
+  ],
+  "compatibility": {
+    "php-version-min": "7.1.0",
+    "php-version-max": "",
+    "redcap-version-min": "v10.0.5",
+    "redcap-version-max": ""
+  }
+}
