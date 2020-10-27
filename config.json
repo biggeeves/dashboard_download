@@ -1,7 +1,7 @@
 {
-  "name": "Dashboard Download",
-  "namespace": "DCC\\DashboardDownload",
-  "description": "Download the Dashboard in three different styles.",
+  "name": "Record Status Download",
+  "namespace": "DCC\\RecordStatusDownload",
+  "description": "Download the Record Status Dashboard in three different styles.",
   "documentation": "README.md",
   "authors": [
     {
@@ -22,7 +22,7 @@
   "links": {
     "project": [
       {
-        "name": "Dashboard Download",
+        "name": "Record Status Download",
         "icon": "database_table",
         "url": "index.php"
       }

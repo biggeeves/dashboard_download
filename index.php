@@ -1,9 +1,9 @@
 <?php
 /** @var DashboardReport $module */
 
-use DCC\DictionarySearch\DashboardReport;
+use DCC\RecordStatusDownload;
 
-if (is_null($module) || !($module instanceof DCC\DashboardDownload\DashboardDownload)) {
+if (is_null($module) || !($module instanceof DCC\RecordStatusDownload\RecordStatusDownload)) {
     echo "Module Error";
     exit();
 }
