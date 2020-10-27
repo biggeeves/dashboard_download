@@ -61,9 +61,9 @@ class RecordStatusDownload extends AbstractExternalModule
     private $completedFields;
 
     private $completedValues = [
-        0 => '',
-        1 => 'U',
-        2 => 'C'
+        0 => '0',
+        1 => '1',
+        2 => '2'
     ];
     /**
      * @var array|null
@@ -110,7 +110,7 @@ class RecordStatusDownload extends AbstractExternalModule
     /**
      * @var String $pid Project id of current REDCap project.
      */
-    private $pid;
+    protected $pid;
     /**
      * @var string|null
      */
@@ -143,7 +143,6 @@ class RecordStatusDownload extends AbstractExternalModule
     function __construct()
     {
         parent::__construct();
-        $this->initialize();
     }
 
     /**
@@ -178,13 +177,20 @@ class RecordStatusDownload extends AbstractExternalModule
 
         $this->setReturnJson();
 
-        $this->dataLimit = 5;
+        if (intval($_GET['dataLimit']) <= 50 && isset($_GET['dataLimit'])) {
+            $this->dataLimit = intval($_GET['dataLimit']);
+        } else {
+            $this->dataLimit = 5;
+        }
 
         $this->setGridType();
 
         $this->setUserInfo();
 
         $this->instrumentNames = REDCap::getInstrumentNames();
+
+        $this->limitUserToInstruments();
+
         $this->setEventNames();
 
         $this->setSpecificId();
@@ -205,13 +211,13 @@ class RecordStatusDownload extends AbstractExternalModule
 
     private function setCanDownload()
     {
-        $canDownload = false;
-        $rights = REDCap::getUserRights($this->userid);
-        if ($rights[$this->userid]["data_export_tool"] === "1") {
-            $canDownload = true;
+        $this->canDownload = false;
+        $this->rights = REDCap::getUserRights($this->userid);
+        if ($this->rights[$this->userid]["data_export_tool"] === "1") {
+            $this->canDownload = true;
             // exit("<div class='red'>You don't have permission to view this page</div><a href='" . $this->getUrl("index.php") . "'>Back to Front</a>");
         }
-        return $canDownload;
+        return $this->canDownload;
     }
 
     private function setReturnJson()
@@ -370,7 +376,7 @@ class RecordStatusDownload extends AbstractExternalModule
                         $this->json[$row][] = $inEvent;
                         $this->json[$row][] = $this->eventLabels[$eventId];
                     } else {
-                        if (intval($inEvent) != 0) {
+                        if (!is_null($inEvent)) {
                             $this->json[$row][] = $this->completedValues[$inEvent];
                         } else {
                             $this->json[$row][] = '';
@@ -571,7 +577,11 @@ class RecordStatusDownload extends AbstractExternalModule
 
     private function renderLegend()
     {
-        return '<ul><li>Blank = Not Done or Incomplete</li><li>U = Unverified</li><li>C = Complete</li></ul>';
+        return '<ul><li>Blank = Empty</li>' .
+            '<li>0 = Incomplete or Empty</li>' .
+            '<li>1 = Unverified</li>' .
+            '<li>2 = Complete</li>' .
+            '</ul>' . '<p>Note: Incomplete or Empty can not be differentiated as an instrument can be empty, but due to another instrument in the same event having data, the value will be incomplete for all instruments in that event, even empty ones.</p>';
     }
 
     /**
@@ -608,6 +618,9 @@ class RecordStatusDownload extends AbstractExternalModule
         if (isset($_GET['showjson']) && $_GET['showjson'] === 'y') {
             $linkOptions .= '&showjson=y';
         }
+        if (isset($_GET['dataLimit']) && intval($_GET['dataLimit']) <= 50) {
+            $linkOptions .= '&dataLimit=' . intval($_GET['dataLimit']);
+        }
 
 
         if (!REDCap::isLongitudinal()) {
@@ -635,14 +648,12 @@ class RecordStatusDownload extends AbstractExternalModule
         return $html;
     }
 
-    private
-    function renderMessageArea()
+    private function renderMessageArea()
     {
         return '<p id="dbr_message"></p>';
     }
 
-    private
-    function renderDownloadButton()
+    private function renderDownloadButton()
     {
         global $project_id;
         $urlToGet = "'" . $this->getUrl("index.php") . "&json=y";
@@ -669,8 +680,7 @@ class RecordStatusDownload extends AbstractExternalModule
         return $html;
     }
 
-    private
-    function renderOptions()
+    private function renderOptions()
     {
         if (isset($_GET['instrumentNames']) && $_GET['instrumentNames'] === 'y') {
             $this->renderArray($this->instrumentNames, 'Instrument Names');
@@ -699,10 +709,13 @@ class RecordStatusDownload extends AbstractExternalModule
         if (isset($_GET['showjson']) && $_GET['showjson'] === 'y') {
             $this->renderArray($this->json, 'JSON');
         }
+
+        /*        if (isset($_GET['userRights']) && $_GET['userRights'] === 'y') {
+                    $this->renderArray($this->userRights, 'userRights');
+                }*/
     }
 
-    public
-    function renderPage()
+    public function renderPage()
     {
 
         $this->renderOptions();
@@ -711,8 +724,10 @@ class RecordStatusDownload extends AbstractExternalModule
         echo $this->renderMessageArea();
         if ($this->gridType === 'columns') {
             echo $this->renderLegend();
+            echo '<h4>Each data represents the total number of instruments a record(subject) has.</h4>';
             echo $this->htmlTable;
         } elseif ($this->gridType === 'simplified') {
+            echo '<h4>Each data represents the total number of instruments a record(subject) has.</h4>';
             $this->jsonToHTMLTable();
         } else {
             echo $this->renderLegend();
@@ -725,13 +740,21 @@ class RecordStatusDownload extends AbstractExternalModule
         echo $this->renderScripts();
     }
 
-    public
-    function hasPid()
+    public function hasPid()
     {
         if (is_null($this->pid)) {
             return false;
         }
         return true;
+    }
+
+    private function limitUserToInstruments()
+    {
+        foreach ($this->userRights['forms'] as $instrumentName => $right) {
+            if (intval($right) === 0) {
+                unset($this->instrumentNames[$instrumentName]);
+            }
+        }
     }
 
 }

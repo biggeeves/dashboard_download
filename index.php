@@ -1,5 +1,5 @@
 <?php
-/** @var DashboardReport $module */
+/** @var RecordStatusDownload $module */
 
 use DCC\RecordStatusDownload;
 
@@ -14,6 +14,7 @@ if (!$module->hasPid()) {
 } else {
     $module->controller();
     if ($module->returnJson) {
+        REDCap::logEvent("Downloaded Record Status Dashboard");
         $module->transformData();
         header('Content-Type: application/json');
         echo json_encode($module->json);
