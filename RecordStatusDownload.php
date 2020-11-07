@@ -127,7 +127,18 @@ class RecordStatusDownload extends AbstractExternalModule
      * @var mixed|null
      */
     private $rights;
-
+    /**
+     * @var bool|null
+     */
+    private $hasData;
+    /**
+     * @var string|null
+     */
+    private $nonSelected;
+    /**
+     * @var string|null
+     */
+    private $selected;
 
     /**
      * @param int $project_id Global Variable set by REDCap for Project ID.
@@ -136,6 +147,16 @@ class RecordStatusDownload extends AbstractExternalModule
     {
 
     }
+
+//    // check user permissions  By default system administrators and people with design rights will automatically
+//    // see the link
+//    public function redcap_module_link_check_display($project_id, $link)
+//    {
+//        // todo what rights should a user have to the display and the download
+//        // If user
+//        // return true;
+//    }
+
 
     /**
      * Initialize class variables.
@@ -159,11 +180,10 @@ class RecordStatusDownload extends AbstractExternalModule
             return;
         }
 
-        // todo add user check to see if in project
-        // todo add check if User Has Download Data Permission.
         $this->setCanDownload(); // should return true or false
 
         $this->transformData();
+
 
     }
 
@@ -182,6 +202,8 @@ class RecordStatusDownload extends AbstractExternalModule
         } else {
             $this->dataLimit = 5;
         }
+        $this->nonSelected = 'btn-info';
+        $this->selected = 'btn-warning';
 
         $this->setGridType();
 
@@ -205,7 +227,13 @@ class RecordStatusDownload extends AbstractExternalModule
         $this->record_id_field = REDCap::getRecordIdField();
         $this->completedFields[] = $this->record_id_field;
 
-        $this->data = REDCap::getData('array', $this->specificId, $this->completedFields);
+        $this->data = REDCap::getData('array', $this->specificId, $this->completedFields, null, $this->group_id);
+
+        if (empty($this->data)) {
+            $this->hasData = false;
+        } else {
+            $this->hasData = true;
+        }
 
     }
 
@@ -215,7 +243,6 @@ class RecordStatusDownload extends AbstractExternalModule
         $this->rights = REDCap::getUserRights($this->userid);
         if ($this->rights[$this->userid]["data_export_tool"] === "1") {
             $this->canDownload = true;
-            // exit("<div class='red'>You don't have permission to view this page</div><a href='" . $this->getUrl("index.php") . "'>Back to Front</a>");
         }
         return $this->canDownload;
     }
@@ -252,23 +279,23 @@ class RecordStatusDownload extends AbstractExternalModule
 
     private function setUserInfo()
     {
-        $this->rights = REDCap::getUserRights(USERID);
-        $this->group_id = $this->rights[USERID]['group_id'];
+        $user = USERID;
+        // $user = 'gneils';  // todo for testing
+        $this->rights = REDCap::getUserRights($user);
+        $this->group_id = $this->rights[$user]['group_id'];
         $this->userRights = array_shift($this->rights);
+        // $user->dag = REDCap::get
+
     }
 
     public function transformData()
     {
         if ($this->gridType === 'columns') {
-            $this->transformGridColumns();
+            $this->transformToColumns();
         } elseif ($this->gridType === 'simplified') {
-            $this->transformGridSimplified();
+            $this->transformToSimplified();
         } else {
-            $this->transformEventsInRows();
-        }
-        if (empty($this->data)) {
-            // todo Correct this to set the $this->json value
-            echo '<h2>There is no data.</h2>';
+            $this->transformToRows();
         }
     }
 
@@ -280,7 +307,7 @@ class RecordStatusDownload extends AbstractExternalModule
     /**
      * @return string
      */
-    private function transformGridSimplified()
+    private function transformToSimplified()
     {
         $this->json = [];
         $hasFormSum = []; // Array  Instrument => running count
@@ -295,7 +322,7 @@ class RecordStatusDownload extends AbstractExternalModule
         $limitCounter = 0;
         foreach ($this->data as $recordId => $recordData) {
             $row++;
-            // Limit number of sample rows shown
+            // Limit number of sample rows shown for HTML.  Skip if JSON is returned.
             if (!$this->returnJson) {
                 $limitCounter++;
                 if ($limitCounter > $this->dataLimit) {
@@ -351,7 +378,7 @@ class RecordStatusDownload extends AbstractExternalModule
     /**
      * @return string
      */
-    private function transformEventsInRows()
+    private function transformToRows()
     {
         // todo handle infinitely repeating events
         $this->json = [];
@@ -391,16 +418,14 @@ class RecordStatusDownload extends AbstractExternalModule
     /**
      * @return string
      */
-    private function transformGridColumns()
+    private function transformToColumns()
     {
         // todo handle infinitely repeating events
 
         // because the variable name must be unique, the event ID is appended to the instrument name
         $this->json = [];
 
-        $this->htmlTable = '<h3>Each event is a group of columns.</h3>' .
-            '<h5>Sample data.</h5>' .
-            '<table class="table table-hover table-striped table-bordered">';
+        $this->htmlTable = '<table class="table table-hover table-striped table-bordered">';
 
         $headerEvents = '<tr><th></th>';
         $headerInstruments = '<tr><th>' . $this->record_id_field . '</th>';
@@ -408,13 +433,21 @@ class RecordStatusDownload extends AbstractExternalModule
         foreach ($this->eventGrid as $eventId => $instruments) {
             $colspan = 0;
             $headerEvents .= "<th colspan='";
+            $hasAtLeastOneForm = false;
             foreach ($instruments as $instrumentName => $inEvent) {
                 if (intval($inEvent) === 1) {
+                    $hasAtLeastOneForm = true;
                     $colspan++;
-                    $headerInstruments .= '<th>' . $instrumentName . '</th>' . PHP_EOL;
+                    // debug
+                    $headerInstruments .= '<th title="' . $this->instrumentNames[$instrumentName] . '">' . $instrumentName . '</th>' . PHP_EOL;
                     $this->json[0][] = $instrumentName . '_' . $eventId;
                 }
             }
+            if (!$hasAtLeastOneForm) {
+                $headerInstruments .= '<th>NA</th>' . PHP_EOL;
+                $this->json[0][] = '';
+            }
+
             $headerEvents .= $colspan . "'>" . $this->eventLabels[$eventId] . "</th>";
         }
         $headerEvents .= "</tr>";
@@ -433,19 +466,15 @@ class RecordStatusDownload extends AbstractExternalModule
             $this->htmlTable .= '<tr><td>' . $id . '</td>';
             $this->json[$row][] = $id;
             foreach ($this->eventGrid as $eventId => $instruments) {
-                if (!array_key_exists($eventId, $this->data[$id])) {
-                    foreach ($instruments as $instrumentName => $inEvent) {
-                        if (!$inEvent) {
-                            continue;
-                        } else {
-                            $this->htmlTable .= "<td></td>" . PHP_EOL;
-                            $this->json[$row][] = $eventId;
-                        }
-                    }
-                } else {
+                $hasAtLeastOneForm = false;
+                if (array_key_exists($eventId, $this->data[$id])) {
+
                     // the data has the eventID.  Cycle through all instruments and show completed var status.
                     foreach ($instruments as $instrumentName => $inEvent) {
+
+                        echo '<script>console.log("' . $eventId . ':' . $instrumentName . ':' . $inEvent . '")</script>';
                         if ($inEvent) {
+                            $hasAtLeastOneForm = true;
                             $completedVarName = $instrumentName . '_complete';
                             $this->htmlTable .= '<td>';
                             $status = 0;
@@ -457,6 +486,20 @@ class RecordStatusDownload extends AbstractExternalModule
                             $this->htmlTable .= '</td>' . PHP_EOL;
                         }
                     }
+                } else {
+                    foreach ($instruments as $instrumentName => $inEvent) {
+                        if (!$inEvent) {
+                            continue;
+                        } else {
+                            $hasAtLeastOneForm = true;
+                            $this->htmlTable .= "<td>-</td>" . PHP_EOL;
+                            $this->json[$row][] = '';
+                        }
+                    }
+                }
+                if (!$hasAtLeastOneForm) {
+                    $this->json[$row][] = '';
+                    $this->htmlTable .= '<td>.</td>';
                 }
             }
             $this->htmlTable .= '</tr>' . PHP_EOL;
@@ -577,11 +620,11 @@ class RecordStatusDownload extends AbstractExternalModule
 
     private function renderLegend()
     {
-        return '<ul><li>Blank = Empty</li>' .
-            '<li>0 = Incomplete or Empty</li>' .
-            '<li>1 = Unverified</li>' .
-            '<li>2 = Complete</li>' .
-            '</ul>' . '<p>Note: Incomplete or Empty can not be differentiated as an instrument can be empty, but due to another instrument in the same event having data, the value will be incomplete for all instruments in that event, even empty ones.</p>';
+        return '<div class="row"><div class="col-1">Legend</div>' .
+            '<div class="col-11">Blank = Empty ' .
+            '| <strong>0</strong> = Incomplete or Empty' .
+            '| <strong>1</strong> = Unverified' .
+            '| <strong>2</strong> = Complete</div></div>';
     }
 
     /**
@@ -589,68 +632,39 @@ class RecordStatusDownload extends AbstractExternalModule
      */
     private function renderButtons()
     {
-        $linkOptions = '';
-
-        if (isset($_GET['instrumentNames']) && $_GET['instrumentNames'] === 'y') {
-            $linkOptions .= '&instrumentNames=y';
-        }
-
-        if (isset($_GET['eventNames']) && $_GET['eventNames'] === 'y') {
-            $linkOptions .= '&eventNames=y';
-        }
-
-        if (isset($_GET['eventLabels']) && $_GET['eventLabels'] === 'y') {
-            $linkOptions .= '&eventLabels=y';
-        }
-
-        if (isset($_GET['completed']) && $_GET['completed'] === 'y') {
-            $linkOptions .= '&completed=y';
-        }
-
-        if (isset($_GET['eventGrid']) && $_GET['eventGrid'] === 'y') {
-            $linkOptions .= '&eventGrid=y';
-        }
-
-        if (isset($_GET['data']) && $_GET['data'] === 'y') {
-            $linkOptions .= '&data=y';
-        }
-
-        if (isset($_GET['showjson']) && $_GET['showjson'] === 'y') {
-            $linkOptions .= '&showjson=y';
-        }
-        if (isset($_GET['dataLimit']) && intval($_GET['dataLimit']) <= 50) {
-            $linkOptions .= '&dataLimit=' . intval($_GET['dataLimit']);
-        }
-
+        $linkOptions = $this->buildLinkOptions();
 
         if (!REDCap::isLongitudinal()) {
             $html = '';
         } else {
-            $html = '<h4>Display events in...';
-            $columnClass = 'btn-info';
-            $rowClass = 'btn-info';
-            $simplifiedClass = 'btn-info';
+            $html = 'Display events in...';
+            $columnClass = $this->nonSelected;
+            $rowClass = $this->nonSelected;
+            $simplifiedClass = $this->nonSelected;
             if ($this->gridType === 'columns') {
-                $columnClass = 'btn-warning';
+                $columnClass = $this->selected;
             } else if ($this->gridType === 'simplified') {
-                $simplifiedClass = 'btn-warning';
+                $simplifiedClass = $this->selected;
             } else {
-                $rowClass = 'btn-warning';
+                $rowClass = $this->selected;
             }
             $html .= '<a class="btn ' . $rowClass . ' pr-4 mx-3" href="'
                 . $this->getUrl('index.php') . '&type=rows' . $linkOptions . '">Rows</a>' . ' or ' .
-                '<a class="btn ' . $simplifiedClass . ' pr-4 mx-3" href="' . $this->getUrl('index.php') . '&type=simplified' . $linkOptions . '">Rows Simplified</a>' .
+                '<a class="btn ' . $simplifiedClass . ' pr-4 mx-3" ' .
+                'href="' . $this->getUrl('index.php') . '&type=simplified' . $linkOptions . '">Rows Simplified</a>' .
                 ' or ' .
-                '<a class="btn ' . $columnClass . ' pr-4 mx-3" href="' . $this->getUrl('index.php') . '&type=columns' . $linkOptions . '">Columns</a>' .
-                '</h4>';
+                '<a class="btn ' . $columnClass . ' pr-4 mx-3" ' .
+                'href="' . $this->getUrl('index.php') . '&type=columns' . $linkOptions . '">Columns</a>';
         }
+
+        $html = '<h4>' . $html . '|' . $this->renderDownloadButton() . $this->renderMessageArea() . "</h4>";
 
         return $html;
     }
 
     private function renderMessageArea()
     {
-        return '<p id="dbr_message"></p>';
+        return '<span class="pl-4" id="dbr_message"></span>';
     }
 
     private function renderDownloadButton()
@@ -672,8 +686,7 @@ class RecordStatusDownload extends AbstractExternalModule
         }
         $urlToGet .= "'";
 
-        $html = '<p>' .
-            '<button class="btn btn-success btn-sm" ' .
+        $html = '<button class="btn ' . $this->selected . ' btn-sm" ' .
             'onclick="getJSON(' . $urlToGet . ', ' . $fileName . ')"' .
             '>Download</button>';
 
@@ -706,35 +719,55 @@ class RecordStatusDownload extends AbstractExternalModule
             $this->renderArray($this->data, 'REDCap Data');
         }
 
-        if (isset($_GET['showjson']) && $_GET['showjson'] === 'y') {
+        if (isset($_GET['showJson']) && $_GET['showJson'] === 'y') {
             $this->renderArray($this->json, 'JSON');
         }
 
-        /*        if (isset($_GET['userRights']) && $_GET['userRights'] === 'y') {
-                    $this->renderArray($this->userRights, 'userRights');
-                }*/
+        if (isset($_GET['userRights']) && $_GET['userRights'] === 'y') {
+            $this->renderArray($this->userRights, 'userRights');
+        }
+        if (isset($_GET['dag']) && $_GET['dag'] === 'y') {
+            $this->renderArray($this->group_id, 'Group ID/DAG');
+        }
+
     }
 
     public function renderPage()
     {
 
+        echo '<h2 class="">Record Status Dashboard</h2>';
+        echo '<p class="mb-5">The record status report here is slightly different compared to REDCap\'s.' .
+            ' The status is simplified in this report. Incomplete or Empty can not be differentiated' .
+            ' as an instrument can be empty, but due to another instrument in the same event having data,' .
+            ' the value will be incomplete for all instruments in that event, even empty ones.' .
+            ' Unverified and Incomplete are the same as in REDCap.</p>';
+
+        if (!$this->hasData) {
+            echo '<p>There is no data to display.</p>';
+            return;
+        }
         $this->renderOptions();
         echo $this->renderButtons();
-        echo $this->renderDownloadButton();
-        echo $this->renderMessageArea();
         if ($this->gridType === 'columns') {
-            echo $this->renderLegend();
-            echo '<h4>Each data represents the total number of instruments a record(subject) has.</h4>';
+            echo '<p>Columns: Columns are grouped by events. Instruments are .' .
+                ' Each event is a group of columns.</p>' .
+                '<p>Sample:</p>';
+            echo '<div class="table-responsive">';
             echo $this->htmlTable;
-        } elseif ($this->gridType === 'simplified') {
-            echo '<h4>Each data represents the total number of instruments a record(subject) has.</h4>';
-            $this->jsonToHTMLTable();
-        } else {
+            echo '</div>';
             echo $this->renderLegend();
+        } elseif ($this->gridType === 'simplified') {
+            echo '<p>Simplified: Each cell contains the total number of instruments a record has across all events.</p>' .
+                '<p>Sample:</p>';
+            echo '<div class="table-responsive">';
             $this->jsonToHTMLTable();
-        }
-        if (empty($this->data)) {
-            echo '<h2>There is no data.</h2>';
+            echo '</div>';
+        } else {
+            echo '<p>Rows: Every event is in it\'s own row.</p><p>Sample:</p>';
+            echo '<div class="table-responsive">';
+            $this->jsonToHTMLTable();
+            echo '</div>';
+            echo $this->renderLegend();
         }
         echo $this->getCSS();
         echo $this->renderScripts();
@@ -755,6 +788,52 @@ class RecordStatusDownload extends AbstractExternalModule
                 unset($this->instrumentNames[$instrumentName]);
             }
         }
+    }
+
+    private function buildLinkOptions()
+    {
+        $linkOptions = '';
+
+        if (isset($_GET['instrumentNames']) && $_GET['instrumentNames'] === 'y') {
+            $linkOptions .= '&instrumentNames=y';
+        }
+
+        if (isset($_GET['eventNames']) && $_GET['eventNames'] === 'y') {
+            $linkOptions .= '&eventNames=y';
+        }
+
+        if (isset($_GET['eventLabels']) && $_GET['eventLabels'] === 'y') {
+            $linkOptions .= '&eventLabels=y';
+        }
+
+        if (isset($_GET['completed']) && $_GET['completed'] === 'y') {
+            $linkOptions .= '&completed=y';
+        }
+
+        if (isset($_GET['eventGrid']) && $_GET['eventGrid'] === 'y') {
+            $linkOptions .= '&eventGrid=y';
+        }
+
+        if (isset($_GET['data']) && $_GET['data'] === 'y') {
+            $linkOptions .= '&data=y';
+        }
+
+        if (isset($_GET['showJson']) && $_GET['showJson'] === 'y') {
+            $linkOptions .= '&showJson=y';
+        }
+
+        if (isset($_GET['dataLimit']) && intval($_GET['dataLimit']) <= 50) {
+            $linkOptions .= '&dataLimit=' . intval($_GET['dataLimit']);
+        }
+
+        if (isset($_GET['userRights']) && $_GET['userRights'] === 'y') {
+            $linkOptions .= '&userRights=y';
+        }
+        if (isset($_GET['dag']) && $_GET['dag'] === 'y') {
+            $linkOptions .= '&dag=y';
+        }
+
+        return $linkOptions;
     }
 
 }
