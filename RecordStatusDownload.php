@@ -1,8 +1,12 @@
 <?php
 
 namespace DCC\RecordStatusDownload;
+
+require_once dirname(__FILE__) . DS . 'DictionaryHelper.php';
+
 // require_once "emLoggerTrait.php";
 
+use DCC\RecordStatusDownload\DictionaryHelper;
 use Exception;
 use ExternalModules\AbstractExternalModule;
 use REDCap;
@@ -139,6 +143,10 @@ class RecordStatusDownload extends AbstractExternalModule
      * @var string|null
      */
     private $selected;
+    /**
+     * @var \DCC\RecordStatusDownload\DictionaryHelper|null
+     */
+    private $dictionary;
 
     /**
      * @param int $project_id Global Variable set by REDCap for Project ID.
@@ -166,6 +174,11 @@ class RecordStatusDownload extends AbstractExternalModule
         parent::__construct();
     }
 
+    public function createDictionary()
+    {
+        $this->dictionary = new DictionaryHelper();
+    }
+
     /**
      *  Main action for Dashboard Report
      *  1) Create report
@@ -184,7 +197,6 @@ class RecordStatusDownload extends AbstractExternalModule
 
         $this->transformData();
 
-
     }
 
     public function initialize()
@@ -194,6 +206,8 @@ class RecordStatusDownload extends AbstractExternalModule
         if (!$this->pid) {
             return;
         }
+
+        $this->createDictionary();
 
         $this->setReturnJson();
 
@@ -211,6 +225,8 @@ class RecordStatusDownload extends AbstractExternalModule
 
         $this->instrumentNames = REDCap::getInstrumentNames();
 
+        $x = $this->dictionary->getInstrumentNames();
+// todo keep simplifying this by using the Dictionary Class.
         $this->limitUserToInstruments();
 
         $this->setEventNames();
@@ -284,8 +300,6 @@ class RecordStatusDownload extends AbstractExternalModule
         $this->rights = REDCap::getUserRights($user);
         $this->group_id = $this->rights[$user]['group_id'];
         $this->userRights = array_shift($this->rights);
-        // $user->dag = REDCap::get
-
     }
 
     public function transformData()
@@ -611,7 +625,7 @@ class RecordStatusDownload extends AbstractExternalModule
      * @param $output
      * @param $title
      */
-    private function renderArray($output, $title = '')
+    public function renderArray($output, $title = '')
     {
         echo '<hr><h4>' . $title . '</h4><pre>';
         print_r($output);
@@ -835,5 +849,4 @@ class RecordStatusDownload extends AbstractExternalModule
 
         return $linkOptions;
     }
-
 }
