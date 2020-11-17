@@ -53,11 +53,11 @@ if (!$module->hasPid()) {
 //    $needle = 'Dynamic';
 //    $category = 'field_label';
 //    $module->renderArray($dictionary->searchFieldMeta($needle, $category), 'Search Field Meta Results');
-    $fieldName = 'some_missing_not_defined';
-    $module->renderArray($dictionary->getChoiceLabels($fieldName), 'Data Dictionary Array');
+//    $fieldName = 'some_missing_not_defined';
+//    $module->renderArray($dictionary->getChoiceLabels($fieldName), 'Data Dictionary Array');
 //       $module->renderArray($dictionary->getDataDictionary(),'Data Dictionary Array');
-    echo "<br>Development" . __FILE__ . ":" . __LINE__ . "<br>";
-    die;
+//    echo "<br>Development" . __FILE__ . ":" . __LINE__ . "<br>";
+//    die;
     $module->controller();
     if ($module->returnJson) {
         REDCap::logEvent("Downloaded Record Status Dashboard");
